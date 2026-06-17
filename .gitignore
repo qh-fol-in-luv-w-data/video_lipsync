@@ -1,0 +1,20 @@
+# API key hardcoded — không push
+test_video.py
+test_video2.py
+
+# Personal data
+*.pdf
+Generated_CVs/
+
+# Build artifacts / duplicate
+Generated_Audio/
+__pycache__/
+*.pyc
+*.pyo
+
+# LatentSync repo + checkpoints (quá lớn, tự clone khi chạy)
+LatentSync/
+
+# OS
+.DS_Store
+Thumbs.db
