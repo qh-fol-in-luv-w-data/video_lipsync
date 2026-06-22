@@ -1,3 +1,7 @@
+# Secrets
+.env
+.env.*
+
 # API key hardcoded — không push
 test_video.py
 test_video2.py
