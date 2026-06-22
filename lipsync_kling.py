@@ -17,31 +17,47 @@ import base64
 import os
 import sys
 import time
+import unicodedata
 from pathlib import Path
 
+import jwt
 import requests
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# Luôn chạy relative từ thư mục chứa script
+os.chdir(Path(__file__).parent)
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-BASE_URL   = "https://api.klingai.com"
-API_KEY    = os.environ.get("KLING_API_KEY", "")
-POLL_INTERVAL = 5    # giây
-MAX_WAIT      = 300  # tối đa 5 phút chờ 1 task
+BASE_URL      = "https://api.klingai.com"
+KLING_AK      = os.environ.get("KLING_AK", "")
+KLING_SK      = os.environ.get("KLING_SK", "")
+POLL_INTERVAL = 5
+MAX_WAIT      = 300
 
 # ---------------------------------------------------------------------------
-# Auth header
+# Auth — Kling dùng JWT (HS256) ký bằng SK
 # ---------------------------------------------------------------------------
+
+def _jwt_token() -> str:
+    if not KLING_AK or not KLING_SK:
+        print("[Lỗi] Chưa set KLING_AK / KLING_SK trong .env")
+        print("      Lấy tại: https://klingai.com/dev → API Keys")
+        sys.exit(1)
+    payload = {
+        "iss": KLING_AK,
+        "exp": int(time.time()) + 1800,
+        "nbf": int(time.time()) - 5,
+    }
+    return jwt.encode(payload, KLING_SK, algorithm="HS256")
+
 
 def auth_headers() -> dict:
-    if not API_KEY:
-        print("[Lỗi] Chưa set KLING_API_KEY. Xem hướng dẫn trong README.")
-        sys.exit(1)
     return {
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer {_jwt_token()}",
         "Content-Type":  "application/json",
     }
 
@@ -237,6 +253,21 @@ def batch_run(image_dir: Path, audio_dir: Path, out_dir: Path) -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
+def resolve_file(path_str: str, search_dir: Path) -> Path:
+    """Tìm file thực trong thư mục — xử lý tên có ký tự Unicode đặc biệt."""
+    p = Path(path_str)
+    if p.exists():
+        return p
+    # Tìm theo tên chuẩn hoá (bỏ qua sự khác biệt về loại space)
+    name_norm = unicodedata.normalize("NFC", p.name).replace(" ", " ").replace("\xa0", " ")
+    for f in search_dir.iterdir():
+        f_norm = unicodedata.normalize("NFC", f.name).replace(" ", " ").replace("\xa0", " ")
+        if f_norm == name_norm:
+            return f
+    print(f"[Lỗi] Không tìm thấy file: {path_str}")
+    sys.exit(1)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Kling AI Lip-sync")
     ap.add_argument("--image",  help="Ảnh đầu vào")
@@ -254,7 +285,9 @@ def main():
     else:
         if not args.image or not args.audio:
             ap.print_help(); sys.exit(1)
-        process_one(Path(args.image), Path(args.audio), Path(args.out))
+        image = resolve_file(args.image, Path("inputs/images"))
+        audio = resolve_file(args.audio, Path("inputs/audios"))
+        process_one(image, audio, Path(args.out))
 
 
 if __name__ == "__main__":
